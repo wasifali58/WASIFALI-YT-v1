@@ -1,14 +1,15 @@
-// YOUTUBE DOWNLOADER API - DIRECT VIDEO LINK FETCH
+// YOUTUBE DOWNLOADER API - OPTIMIZED
 // Developer: WASIF ALI | Telegram: @FREEHACKS95
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   if (req.method === 'GET' && !req.query.url) {
     return res.status(200).json({
-      message: "YouTube Downloader API - Direct Fetch",
+      message: "YouTube Downloader API",
       usage: "/api/download?url=YOUTUBE_URL",
       developer: "WASIF ALI",
       telegram: "@FREEHACKS95"
@@ -27,77 +28,86 @@ export default async function handler(req, res) {
 
     const videoId = extractVideoId(url);
     
-    // === METHOD 1: Direct pwn.sh API (Working 100%) ===
+    // Use faster API - pwn.sh (usually responds in 2-3 seconds)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    
     const pwnRes = await fetch(`https://pwn.sh/tools/ytdl/get?url=https://youtu.be/${videoId}`, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-      }
+      signal: controller.signal,
+      headers: { "User-Agent": "Mozilla/5.0" }
     });
+    
+    clearTimeout(timeoutId);
     
     if (pwnRes.ok) {
       const data = await pwnRes.json();
+      const qualities = [];
       
-      if (data && data.urls && data.urls.length > 0) {
-        const qualities = [];
-        
-        // Add MP3 if available
-        if (data.audio && data.audio.url) {
+      // Audio
+      if (data.audio?.url) {
+        qualities.push({
+          quality: "MP3 Audio",
+          url: data.audio.url,
+          type: "audio"
+        });
+      }
+      
+      // Video qualities
+      const videoUrls = data.urls || [];
+      for (const fmt of videoUrls) {
+        if (fmt.quality === "360p" || fmt.quality === "480p" || fmt.quality === "720p") {
           qualities.push({
-            quality: "MP3 Audio",
-            url: data.audio.url,
-            type: "audio"
-          });
-        }
-        
-        // Add video qualities: 360p, 480p, 720p
-        const videoUrls = data.urls || [];
-        for (const fmt of videoUrls) {
-          if (fmt.quality === "360p" || fmt.quality === "480p" || fmt.quality === "720p") {
-            qualities.push({
-              quality: fmt.quality,
-              url: fmt.url,
-              type: "video"
-            });
-          }
-        }
-        
-        // If specific qualities missing, add best available
-        if (qualities.filter(q => q.type === "video").length === 0 && videoUrls.length > 0) {
-          qualities.push({
-            quality: "720p",
-            url: videoUrls[0].url,
+            quality: fmt.quality,
+            url: fmt.url,
             type: "video"
           });
         }
-        
-        return res.status(200).json({
-          success: true,
-          video: {
-            title: data.title || "Video Title",
-            thumbnail: data.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-            duration_seconds: data.duration || 0,
-            duration_formatted: formatDuration(data.duration),
-            author: data.author || "YouTube Channel",
-            video_id: videoId,
-            watch_url: `https://youtube.com/watch?v=${videoId}`
-          },
-          qualities: qualities,
-          developer: "WASIF ALI",
-          telegram: "@FREEHACKS95"
-        });
       }
+      
+      return res.status(200).json({
+        success: true,
+        video: {
+          title: data.title || "Video Title",
+          thumbnail: data.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+          duration_seconds: data.duration || 0,
+          duration_formatted: formatDuration(data.duration),
+          author: data.author || "YouTube Channel",
+          video_id: videoId,
+          watch_url: `https://youtube.com/watch?v=${videoId}`
+        },
+        qualities: qualities,
+        developer: "WASIF ALI",
+        telegram: "@FREEHACKS95"
+      });
     }
     
-    // === METHOD 2: yt1s.com API (Fallback) ===
-    const yt1sRes = await fetch("https://yt1s.com/api/ajaxSearch", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "X-Requested-With": "XMLHttpRequest"
-      },
-      body: `q=https://youtu.be/${videoId}&vt=home`
+    throw new Error("API failed");
+
+  } catch (err) {
+    console.error("Error:", err.message);
+    return res.status(500).json({
+      success: false,
+      error: "Service temporarily unavailable. Please try again.",
+      developer: "WASIF ALI",
+      telegram: "@FREEHACKS95"
     });
-    
-    const yt1sData = await yt1sRes.json();
-    
-    if (yt1sData && yt1sData.links) {
+  }
+}
+
+function extractVideoId(url) {
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\?\/]+)/
+  ];
+  for (const p of patterns) {
+    const match = url.match(p);
+    if (match) return match[1];
+  }
+  return null;
+}
+
+function formatDuration(sec) {
+  if (!sec || sec <= 0) return "00:00";
+  const mins = Math.floor(sec / 60);
+  const secs = sec % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
