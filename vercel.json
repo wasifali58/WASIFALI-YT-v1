@@ -1,6 +1,14 @@
 {
   "version": 2,
   "functions": {
-    "api/download.js": { "maxDuration": 30 }
-  }
+    "api/download.js": {
+      "maxDuration": 30
+    }
+  },
+  "routes": [
+    {
+      "src": "/api/download",
+      "dest": "/api/download.js"
+    }
+  ]
 }
