@@ -1,4 +1,4 @@
-// YOUTUBE DOWNLOADER API – USING YTDOWNLOADPRO.COM
+// YOUTUBE DOWNLOADER API – PWN.SH (WORKING)
 // Developer: WASIF ALI | Telegram: @FREEHACKS95
 
 export default async function handler(req, res) {
@@ -8,7 +8,7 @@ export default async function handler(req, res) {
 
   if (req.method === 'GET' && !req.query.url) {
     return res.status(200).json({
-      message: "YouTube Downloader API – Working (ytdownloadpro.com)",
+      message: "YouTube Downloader API – Working",
       usage: "/api/download?url=YOUTUBE_URL",
       developer: "WASIF ALI",
       telegram: "@FREEHACKS95"
@@ -34,66 +34,61 @@ export default async function handler(req, res) {
       });
     }
 
-    // Define qualities to fetch (as per your capture: 480p, 1080p, plus 360p and MP3)
-    const formats = ["360p", "480p", "720p", "1080p", "mp3"];
+    // Use pwn.sh API (reliable, no auth)
+    const pwnRes = await fetch(`https://pwn.sh/tools/ytdl/get?url=https://youtu.be/${videoId}`, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      }
+    });
+
+    if (!pwnRes.ok) {
+      throw new Error("Failed to fetch from pwn.sh");
+    }
+
+    const data = await pwnRes.json();
+
+    // Extract qualities
     const qualities = [];
 
-    // For each format, call ytdownloadpro.com
-    for (const fmt of formats) {
-      const formData = new FormData();
-      formData.append("action", "start");
-      formData.append("id", videoId);
-      formData.append("format", fmt);
-
-      const proxyRes = await fetch("https://ytdownloadpro.com/youtube_api.php", {
-        method: "POST",
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Mobile Safari/537.36",
-          "Origin": "https://ytdownloadpro.com",
-          "Referer": "https://ytdownloadpro.com/",
-          "Accept": "*/*",
-          "Accept-Language": "en-US,en;q=0.9",
-          "X-Requested-With": "XMLHttpRequest"
-        },
-        body: formData
+    // Audio
+    if (data.audio && data.audio.url) {
+      qualities.push({
+        quality: "MP3 Audio",
+        url: data.audio.url,
+        type: "audio",
+        size_mb: data.audio.size ? (data.audio.size / 1024 / 1024).toFixed(2) : null
       });
+    }
 
-      const data = await proxyRes.json();
-      
-      // The response likely contains a download URL. Common keys: "url", "download_url", "link", "result"
-      let downloadUrl = null;
-      if (data.url) downloadUrl = data.url;
-      else if (data.download_url) downloadUrl = data.download_url;
-      else if (data.link) downloadUrl = data.link;
-      else if (data.result) downloadUrl = data.result;
-      
-      if (downloadUrl) {
+    // Video qualities: filter 360p, 480p, 720p (also 1080p if available)
+    const videoFormats = data.urls || [];
+    const wantedQualities = ["360p", "480p", "720p", "1080p"];
+    for (const fmt of videoFormats) {
+      if (wantedQualities.includes(fmt.quality)) {
         qualities.push({
-          quality: fmt === "mp3" ? "MP3 Audio" : fmt,
-          url: downloadUrl,
-          type: fmt === "mp3" ? "audio" : "video"
+          quality: fmt.quality,
+          url: fmt.url,
+          type: "video",
+          size_mb: fmt.size ? (fmt.size / 1024 / 1024).toFixed(2) : null
         });
       }
     }
 
-    if (qualities.length === 0) {
-      throw new Error("No download links found for this video");
+    // If no matching qualities, take first video format
+    if (qualities.filter(q => q.type === "video").length === 0 && videoFormats.length > 0) {
+      qualities.push({
+        quality: videoFormats[0].quality || "720p",
+        url: videoFormats[0].url,
+        type: "video",
+        size_mb: videoFormats[0].size ? (videoFormats[0].size / 1024 / 1024).toFixed(2) : null
+      });
     }
 
-    // Also try to fetch video metadata (title, thumbnail) from a simple API
-    let title = "Video Title";
-    let thumbnail = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
-    let author = "YouTube Channel";
-    let duration = 0;
-
-    // Optional: get metadata from oembed
-    try {
-      const oembed = await fetch(`https://www.youtube.com/oembed?url=https://youtu.be/${videoId}&format=json`);
-      const oembedData = await oembed.json();
-      title = oembedData.title || title;
-      author = oembedData.author_name || author;
-      thumbnail = oembedData.thumbnail_url || thumbnail;
-    } catch(e) {}
+    // Metadata
+    const title = data.title || "Video Title";
+    const thumbnail = data.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+    const duration = data.duration || 0;
+    const author = data.author || "YouTube Channel";
 
     return res.status(200).json({
       success: true,
@@ -101,7 +96,7 @@ export default async function handler(req, res) {
         title: title,
         thumbnail: thumbnail,
         duration_seconds: duration,
-        duration_formatted: "00:00",
+        duration_formatted: formatDuration(duration),
         author: author,
         video_id: videoId,
         watch_url: `https://youtube.com/watch?v=${videoId}`
@@ -115,7 +110,7 @@ export default async function handler(req, res) {
     console.error("API Error:", err);
     return res.status(500).json({
       success: false,
-      error: err.message || "Failed to fetch video. Please try again.",
+      error: err.message || "Service unavailable. Please try again.",
       developer: "WASIF ALI",
       telegram: "@FREEHACKS95"
     });
@@ -132,4 +127,11 @@ function extractVideoId(url) {
     if (match) return match[1];
   }
   return null;
+}
+
+function formatDuration(sec) {
+  if (!sec || sec <= 0) return "00:00";
+  const mins = Math.floor(sec / 60);
+  const secs = sec % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
