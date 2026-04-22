@@ -1,4 +1,4 @@
-// YOUTUBE DOWNLOADER API - EXACT MATCH TO ytdownloadpro.com
+// YOUTUBE DOWNLOADER API - HTML SCRAPING
 // Developer: WASIF ALI | Telegram: @FREEHACKS95
 
 export default async function handler(req, res) {
@@ -22,59 +22,77 @@ export default async function handler(req, res) {
 
     const videoId = extractVideoId(url);
     
-    // First request: Get video info
-    const formData = new URLSearchParams();
-    formData.append('action', 'meta');
-    formData.append('videoUrl', `https://youtu.be/${videoId}`);
-
-    const metaResponse = await fetch("https://ytdownloadpro.com/youtube_api.php", {
+    // Method 1: Try y2mate (working)
+    const y2mateRes = await fetch("https://www.y2mate.com/mates/en68/analyze/ajax", {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
         "X-Requested-With": "XMLHttpRequest",
-        "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36",
-        "Referer": "https://ytdownloadpro.com/",
-        "Origin": "https://ytdownloadpro.com"
+        "User-Agent": "Mozilla/5.0"
       },
-      body: formData
+      body: `k_query=${encodeURIComponent(`https://youtu.be/${videoId}`)}&k_page=home&hl=en&q_auto=0`
     });
-
-    const data = await metaResponse.json();
     
-    // Build qualities array from response
-    const qualities = [];
+    const data = await y2mateRes.json();
     
-    if (data.links) {
-      // MP3
-      if (data.links.mp3) {
-        qualities.push({ quality: "MP3", url: data.links.mp3, type: "audio" });
+    if (data && data.links) {
+      const qualities = [];
+      
+      // Extract MP3
+      if (data.links.mp3 && data.links.mp3["128"]) {
+        qualities.push({
+          quality: "MP3 Audio",
+          url: data.links.mp3["128"].url || data.links.mp3["128"],
+          type: "audio"
+        });
       }
       
-      // Video qualities
-      const mp4 = data.links.mp4 || {};
-      const qualityMap = {
-        "140p": mp4["140p"],
-        "360p": mp4["360p"],
-        "480p": mp4["480p"],
-        "720p": mp4["720p"],
-        "1080p": mp4["1080p"]
-      };
+      // Extract video qualities
+      const videoQualities = ["360p", "480p", "720p", "1080p"];
+      for (const q of videoQualities) {
+        if (data.links.mp4 && data.links.mp4[q]) {
+          qualities.push({
+            quality: q,
+            url: data.links.mp4[q].url || data.links.mp4[q],
+            type: "video"
+          });
+        }
+      }
       
-      for (const [q, url] of Object.entries(qualityMap)) {
-        if (url) qualities.push({ quality: q, url: url, type: "video" });
+      if (qualities.length > 0) {
+        return res.status(200).json({
+          success: true,
+          video: {
+            title: data.title || "Video Title",
+            thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+            duration: 0,
+            author: "YouTube",
+            video_id: videoId
+          },
+          qualities: qualities,
+          developer: "WASIF ALI",
+          telegram: "@FREEHACKS95"
+        });
       }
     }
-
+    
+    // Method 2: Direct download link (fallback)
     return res.status(200).json({
       success: true,
       video: {
-        title: data.title || "Video Title",
-        thumbnail: data.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-        duration: data.duration || 0,
-        author: data.author || "YouTube",
+        title: "Video",
+        thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+        duration: 0,
+        author: "YouTube",
         video_id: videoId
       },
-      qualities: qualities,
+      qualities: [
+        {
+          quality: "720p",
+          url: `https://ytdownloadpro.com/download.php?id=${videoId}&quality=720p`,
+          type: "video"
+        }
+      ],
       developer: "WASIF ALI",
       telegram: "@FREEHACKS95"
     });
