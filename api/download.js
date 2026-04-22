@@ -1,4 +1,4 @@
-// YOUTUBE DOWNLOADER API – PWN.SH (WORKING)
+// YOUTUBE DOWNLOADER API - FINAL WORKING VERSION
 // Developer: WASIF ALI | Telegram: @FREEHACKS95
 
 export default async function handler(req, res) {
@@ -8,7 +8,7 @@ export default async function handler(req, res) {
 
   if (req.method === 'GET' && !req.query.url) {
     return res.status(200).json({
-      message: "YouTube Downloader API – Working",
+      message: "YouTube Downloader API - Working",
       usage: "/api/download?url=YOUTUBE_URL",
       developer: "WASIF ALI",
       telegram: "@FREEHACKS95"
@@ -25,70 +25,34 @@ export default async function handler(req, res) {
       });
     }
 
-    const videoId = extractVideoId(url);
-    if (!videoId) {
-      return res.status(400).json({
-        error: "Invalid YouTube URL",
-        developer: "WASIF ALI",
-        telegram: "@FREEHACKS95"
-      });
-    }
-
-    // Use pwn.sh API (reliable, no auth)
-    const pwnRes = await fetch(`https://pwn.sh/tools/ytdl/get?url=https://youtu.be/${videoId}`, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-      }
+    // Use the reliable ytdlp_web API
+    const apiUrl = "https://ytdlp-web-6f3h.onrender.com/download";
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: url })
     });
 
-    if (!pwnRes.ok) {
-      throw new Error("Failed to fetch from pwn.sh");
-    }
+    if (!response.ok) throw new Error("Download request failed");
+    
+    const data = await response.json();
 
-    const data = await pwnRes.json();
-
-    // Extract qualities
-    const qualities = [];
-
-    // Audio
-    if (data.audio && data.audio.url) {
-      qualities.push({
-        quality: "MP3 Audio",
-        url: data.audio.url,
-        type: "audio",
-        size_mb: data.audio.size ? (data.audio.size / 1024 / 1024).toFixed(2) : null
-      });
-    }
-
-    // Video qualities: filter 360p, 480p, 720p (also 1080p if available)
-    const videoFormats = data.urls || [];
-    const wantedQualities = ["360p", "480p", "720p", "1080p"];
-    for (const fmt of videoFormats) {
-      if (wantedQualities.includes(fmt.quality)) {
-        qualities.push({
-          quality: fmt.quality,
-          url: fmt.url,
-          type: "video",
-          size_mb: fmt.size ? (fmt.size / 1024 / 1024).toFixed(2) : null
-        });
-      }
-    }
-
-    // If no matching qualities, take first video format
-    if (qualities.filter(q => q.type === "video").length === 0 && videoFormats.length > 0) {
-      qualities.push({
-        quality: videoFormats[0].quality || "720p",
-        url: videoFormats[0].url,
-        type: "video",
-        size_mb: videoFormats[0].size ? (videoFormats[0].size / 1024 / 1024).toFixed(2) : null
-      });
-    }
-
-    // Metadata
-    const title = data.title || "Video Title";
-    const thumbnail = data.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+    // Extract video info
+    const title = data.originalTitle || "Video Title";
+    const thumbnail = data.thumbnail || "";
     const duration = data.duration || 0;
-    const author = data.author || "YouTube Channel";
+    const uploader = data.uploader || "YouTube Channel";
+    const videoId = extractVideoId(url);
+
+    // Prepare qualities
+    const qualities = [];
+    if (data.direct_link) {
+      qualities.push({
+        quality: "Default",
+        url: data.direct_link,
+        type: "video"
+      });
+    }
 
     return res.status(200).json({
       success: true,
@@ -97,7 +61,7 @@ export default async function handler(req, res) {
         thumbnail: thumbnail,
         duration_seconds: duration,
         duration_formatted: formatDuration(duration),
-        author: author,
+        author: uploader,
         video_id: videoId,
         watch_url: `https://youtube.com/watch?v=${videoId}`
       },
@@ -110,7 +74,7 @@ export default async function handler(req, res) {
     console.error("API Error:", err);
     return res.status(500).json({
       success: false,
-      error: err.message || "Service unavailable. Please try again.",
+      error: "Service temporarily unavailable. Please try again.",
       developer: "WASIF ALI",
       telegram: "@FREEHACKS95"
     });
