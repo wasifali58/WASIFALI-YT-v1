@@ -1,5 +1,5 @@
 // PROFESSIONAL YOUTUBE DOWNLOADER API
-// Based on ytdownloadpro.com - All Qualities
+// Exact copy of ytdownloadpro.com
 // Developer: WASIF ALI | Telegram: @FREEHACKS95
 
 export default async function handler(req, res) {
@@ -8,120 +8,92 @@ export default async function handler(req, res) {
   
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // GET request - API info
   if (req.method === 'GET' && !req.query.url) {
     return res.status(200).json({
-      name: "Professional YouTube Downloader API",
-      version: "2.0.0",
+      name: "YouTube Downloader API",
       usage: "/api/download?url=YOUTUBE_URL",
-      qualities: ["MP3", "140p", "360p", "480p", "720p", "1080p", "4K", "8K"],
       developer: "WASIF ALI",
       telegram: "@FREEHACKS95"
     });
   }
 
   try {
-    let videoUrl = req.query.url || req.body?.url;
-    if (!videoUrl) {
-      return res.status(400).json({
-        error: "Missing url parameter",
-        developer: "WASIF ALI",
-        telegram: "@FREEHACKS95"
-      });
-    }
+    const { url } = req.query;
+    if (!url) return res.status(400).json({ error: "Missing url" });
 
-    const videoId = extractVideoId(videoUrl);
+    const videoId = extractVideoId(url);
     
-    // Step 1: Get video metadata and links
-    const formData = new URLSearchParams();
-    formData.append('action', 'meta');
-    formData.append('videoUrl', `https://youtu.be/${videoId}`);
+    // Step 1: Get video metadata
+    const formDataMeta = new URLSearchParams();
+    formDataMeta.append('action', 'meta');
+    formDataMeta.append('videoUrl', `https://youtu.be/${videoId}`);
 
-    const response = await fetch("https://ytdownloadpro.com/youtube_api.php", {
+    const metaRes = await fetch("https://ytdownloadpro.com/youtube_api.php", {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
         "X-Requested-With": "XMLHttpRequest",
         "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36",
-        "Origin": "https://ytdownloadpro.com",
         "Referer": "https://ytdownloadpro.com/"
       },
-      body: formData
+      body: formDataMeta
     });
 
-    const data = await response.json();
-
-    // Extract all available qualities
-    const qualities = [];
-    const allQualities = ["MP3", "140p", "360p", "480p", "720p", "1080p", "4K", "8K"];
+    const metaData = await metaRes.json();
     
-    // Check different response structures
-    if (data.links) {
-      // Audio
-      if (data.links.mp3) {
+    // Step 2: Get download links for each quality
+    const qualities = [];
+    const qualityList = ["MP3", "140p", "360p", "480p", "720p", "1080p", "4K", "8K"];
+    
+    for (const quality of qualityList) {
+      const formDataDownload = new URLSearchParams();
+      formDataDownload.append('action', 'start');
+      formDataDownload.append('id', videoId);
+      formDataDownload.append('format', quality === "MP3" ? "mp3" : quality);
+      
+      const downloadRes = await fetch("https://ytdownloadpro.com/youtube_api.php", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "X-Requested-With": "XMLHttpRequest",
+          "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36",
+          "Referer": "https://ytdownloadpro.com/"
+        },
+        body: formDataDownload
+      });
+      
+      const downloadData = await downloadRes.json();
+      
+      if (downloadData.download_url || downloadData.url) {
         qualities.push({
-          quality: "MP3 Audio",
-          url: data.links.mp3,
-          type: "audio",
-          format: "mp3"
+          quality: quality,
+          url: downloadData.download_url || downloadData.url,
+          type: quality === "MP3" ? "audio" : "video"
         });
       }
-      
-      // Video qualities
-      const mp4 = data.links.mp4 || {};
-      for (const q of allQualities) {
-        const qualityKey = q === "MP3" ? null : q;
-        if (qualityKey && mp4[qualityKey]) {
-          qualities.push({
-            quality: q,
-            url: mp4[qualityKey],
-            type: "video",
-            format: "mp4"
-          });
-        }
-      }
-    }
-    else if (data.formats && Array.isArray(data.formats)) {
-      for (const fmt of data.formats) {
-        const quality = fmt.quality || fmt.label;
-        if (allQualities.includes(quality) || quality === "MP3 Audio") {
-          qualities.push({
-            quality: quality === "MP3 Audio" ? "MP3" : quality,
-            url: fmt.url,
-            type: fmt.type || (quality === "MP3 Audio" ? "audio" : "video"),
-            size_mb: fmt.size ? (fmt.size / 1024 / 1024).toFixed(2) : null
-          });
-        }
-      }
     }
 
-    // Sort qualities in correct order
-    const qualityOrder = ["MP3", "140p", "360p", "480p", "720p", "1080p", "4K", "8K"];
-    qualities.sort((a, b) => qualityOrder.indexOf(a.quality) - qualityOrder.indexOf(b.quality));
-
-    // Return professional JSON response
     return res.status(200).json({
       success: true,
       video: {
-        title: data.title || "Video Title",
-        thumbnail: data.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-        duration_seconds: data.duration || 0,
-        duration_formatted: formatDuration(data.duration),
-        author: data.author || "YouTube Channel",
+        title: metaData.title || "Video Title",
+        thumbnail: metaData.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+        duration_seconds: metaData.duration || 0,
+        duration_formatted: formatDuration(metaData.duration),
+        author: metaData.author || "YouTube Channel",
         video_id: videoId,
         watch_url: `https://youtube.com/watch?v=${videoId}`
       },
       qualities: qualities,
-      total_qualities: qualities.length,
       developer: "WASIF ALI",
       telegram: "@FREEHACKS95"
     });
 
   } catch (err) {
-    console.error("API Error:", err);
+    console.error(err);
     return res.status(500).json({
       success: false,
-      error: err.message || "Failed to fetch video",
+      error: err.message,
       developer: "WASIF ALI",
       telegram: "@FREEHACKS95"
     });
@@ -141,11 +113,7 @@ function extractVideoId(url) {
 
 function formatDuration(sec) {
   if (!sec || sec <= 0) return "00:00";
-  const hours = Math.floor(sec / 3600);
-  const minutes = Math.floor((sec % 3600) / 60);
-  const seconds = sec % 60;
-  if (hours > 0) {
-    return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-  }
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  const mins = Math.floor(sec / 60);
+  const secs = sec % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
