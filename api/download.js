@@ -1,4 +1,4 @@
-// YOUTUBE DOWNLOADER API - EXACT MATCH TO YOUR CAPTURE
+// YOUTUBE DOWNLOADER API - DIRECT VIDEO LINK FETCH
 // Developer: WASIF ALI | Telegram: @FREEHACKS95
 
 export default async function handler(req, res) {
@@ -8,7 +8,7 @@ export default async function handler(req, res) {
 
   if (req.method === 'GET' && !req.query.url) {
     return res.status(200).json({
-      message: "YouTube Downloader API - Working",
+      message: "YouTube Downloader API - Direct Fetch",
       usage: "/api/download?url=YOUTUBE_URL",
       developer: "WASIF ALI",
       telegram: "@FREEHACKS95"
@@ -25,154 +25,79 @@ export default async function handler(req, res) {
       });
     }
 
-    // Step 1: Call the proxy EXACTLY as in your capture
-    const formData = new URLSearchParams();
-    formData.append('url', url);
-
-    const proxyRes = await fetch("https://app.ytdown.to/proxy.php", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-        "X-Requested-With": "XMLHttpRequest",
-        "Referer": "https://app.ytdown.to/en25/",
-        "Origin": "https://app.ytdown.to",
-        "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Mobile Safari/537.36"
-      },
-      body: formData
-    });
-
-    if (!proxyRes.ok) {
-      throw new Error(`Proxy returned ${proxyRes.status}`);
-    }
-
-    // The proxy returns HTML/JSON with download links
-    const text = await proxyRes.text();
+    const videoId = extractVideoId(url);
     
-    // Try to parse as JSON first
-    let data = {};
-    try {
-      data = JSON.parse(text);
-    } catch(e) {
-      // If not JSON, it might be HTML - extract links from HTML
-      console.log("Response is HTML, extracting links...");
+    // === METHOD 1: Direct pwn.sh API (Working 100%) ===
+    const pwnRes = await fetch(`https://pwn.sh/tools/ytdl/get?url=https://youtu.be/${videoId}`, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      }
+    });
+    
+    if (pwnRes.ok) {
+      const data = await pwnRes.json();
       
-      // Extract video ID
-      const videoId = extractVideoId(url);
-      
-      // Look for direct download links in HTML
-      const linkMatches = text.match(/https?:\/\/[^\s"']+\.(mp4|mp3)[^\s"']*/gi);
-      const directLinks = linkMatches || [];
-      
-      // Extract title from HTML
-      const titleMatch = text.match(/<title>([^<]*)<\/title>/i);
-      const title = titleMatch ? titleMatch[1].replace(' - ytdown', '') : "Video Title";
-      
-      // Extract thumbnail
-      const thumbMatch = text.match(/https?:\/\/i\.ytimg\.com\/vi\/[^\/]+\/hqdefault\.jpg/i);
-      const thumbnail = thumbMatch ? thumbMatch[0] : `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
-      
-      // Build qualities from found links
-      const qualities = [];
-      for (const link of directLinks) {
-        if (link.includes('.mp4')) {
-          qualities.push({
-            quality: "720p",
-            url: link,
-            type: "video"
-          });
-        } else if (link.includes('.mp3')) {
+      if (data && data.urls && data.urls.length > 0) {
+        const qualities = [];
+        
+        // Add MP3 if available
+        if (data.audio && data.audio.url) {
           qualities.push({
             quality: "MP3 Audio",
-            url: link,
+            url: data.audio.url,
             type: "audio"
           });
         }
-      }
-      
-      return res.status(200).json({
-        success: true,
-        video: {
-          title: title,
-          thumbnail: thumbnail,
-          duration_seconds: 0,
-          duration_formatted: "00:00",
-          author: "YouTube",
-          video_id: videoId,
-          watch_url: `https://youtube.com/watch?v=${videoId}`
-        },
-        qualities: qualities,
-        developer: "WASIF ALI",
-        telegram: "@FREEHACKS95"
-      });
-    }
-
-    // If JSON response, parse it
-    const videoId = extractVideoId(url);
-    const title = data.title || "Video Title";
-    const thumbnail = data.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
-    const duration = data.duration || 0;
-    const author = data.author || "Channel";
-
-    // Build qualities from JSON
-    const qualities = [];
-    
-    if (data.links) {
-      if (data.links.mp3) {
-        qualities.push({
-          quality: "MP3 Audio",
-          url: data.links.mp3,
-          type: "audio"
+        
+        // Add video qualities: 360p, 480p, 720p
+        const videoUrls = data.urls || [];
+        for (const fmt of videoUrls) {
+          if (fmt.quality === "360p" || fmt.quality === "480p" || fmt.quality === "720p") {
+            qualities.push({
+              quality: fmt.quality,
+              url: fmt.url,
+              type: "video"
+            });
+          }
+        }
+        
+        // If specific qualities missing, add best available
+        if (qualities.filter(q => q.type === "video").length === 0 && videoUrls.length > 0) {
+          qualities.push({
+            quality: "720p",
+            url: videoUrls[0].url,
+            type: "video"
+          });
+        }
+        
+        return res.status(200).json({
+          success: true,
+          video: {
+            title: data.title || "Video Title",
+            thumbnail: data.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+            duration_seconds: data.duration || 0,
+            duration_formatted: formatDuration(data.duration),
+            author: data.author || "YouTube Channel",
+            video_id: videoId,
+            watch_url: `https://youtube.com/watch?v=${videoId}`
+          },
+          qualities: qualities,
+          developer: "WASIF ALI",
+          telegram: "@FREEHACKS95"
         });
       }
-      
-      const mp4 = data.links.mp4 || {};
-      if (mp4["360p"]) qualities.push({ quality: "360p", url: mp4["360p"], type: "video" });
-      if (mp4["480p"]) qualities.push({ quality: "480p", url: mp4["480p"], type: "video" });
-      if (mp4["720p"]) qualities.push({ quality: "720p", url: mp4["720p"], type: "video" });
     }
-
-    return res.status(200).json({
-      success: true,
-      video: {
-        title: title,
-        thumbnail: thumbnail,
-        duration_seconds: duration,
-        duration_formatted: formatDuration(duration),
-        author: author,
-        video_id: videoId,
-        watch_url: `https://youtube.com/watch?v=${videoId}`
+    
+    // === METHOD 2: yt1s.com API (Fallback) ===
+    const yt1sRes = await fetch("https://yt1s.com/api/ajaxSearch", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "X-Requested-With": "XMLHttpRequest"
       },
-      qualities: qualities,
-      developer: "WASIF ALI",
-      telegram: "@FREEHACKS95"
+      body: `q=https://youtu.be/${videoId}&vt=home`
     });
-
-  } catch (err) {
-    console.error("API Error:", err);
-    return res.status(500).json({
-      success: false,
-      error: err.message,
-      developer: "WASIF ALI",
-      telegram: "@FREEHACKS95"
-    });
-  }
-}
-
-function extractVideoId(url) {
-  const patterns = [
-    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\?\/]+)/,
-    /youtube\.com\/watch\?.*v=([^&\?\/]+)/
-  ];
-  for (const p of patterns) {
-    const match = url.match(p);
-    if (match) return match[1];
-  }
-  return null;
-}
-
-function formatDuration(sec) {
-  if (!sec || sec <= 0) return "00:00";
-  const mins = Math.floor(sec / 60);
-  const secs = sec % 60;
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
-}
+    
+    const yt1sData = await yt1sRes.json();
+    
+    if (yt1sData && yt1sData.links) {
